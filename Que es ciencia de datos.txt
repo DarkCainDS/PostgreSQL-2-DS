@@ -1,0 +1,9 @@
+Un científico de datos entiende el negocio y sus necesidades para traducirlo a los demás equipos de datos. El cientifico de datos es el líder. Su trabajo da impacto a la organización
+
+DBAs
+Analistas
+Ingenieros
+En muchas organizaciones va a haber una única persona que se encargue de todo el proceso de datos
+
+Contar historias con los datos
+Las habilidades siempre van a ser necesarias en cualquier organización

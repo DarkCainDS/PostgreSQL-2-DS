@@ -1,0 +1,140 @@
+Common Table Expressions
+rusbel
+rusbelBermudez
+Common Table Expressions (de ahora en adelante CTE’s) se utilizan con la sentencia WITH y proveen una forma de desestructurar largos queries que a su vez pueden contener sub-queries o anidaciones, WITH permite crear una tabla temporal en memoria la cual le podemos aplicar a los amigos SELECT, INSERT, UPDATE, o DELETE y que a su vez podemos encadenar con otras sentencias tablas virtuales deltro del mismo WITH. ****La ventaja fundamental de estas CTE’s es que tienen mucho mejor performance que hacer un query dentro de otro query, ademas permite mejorar la legibilidad de tu codigo con el trade-off de que tendras muchas más lineas de codigo (o un exceso de verbosity, zen de python es mejor ser explicito), la otra funcion de la sentencia WITH es con la sentencia RECURSIVE, lo que nos permite generar una tabla con valores iterativos con la que podemos hacer operaciones de actualizacion o tareas de mantenimiento de datos o reindexar datos en tablas.
+
+En este tutorial me enfoco en el primer caso obtenemos las peliculas de genero Horror, mas rentadas con un precio de renta mayor a $1 y con mas de 100 minutos de duracion te dejo 3 ejemplos para realizar esta consulta donde debemos hacer join a diferentes tablas.
+
+Ejemplo 1: Uso extensivo de JOINS
+
+SELECT 
+	peliculas.titulo,
+	peliculas.clasificacion,
+	categorias.nombre AS genero,
+	count(*) AS rentas_acumuladas,
+	precio_renta * count(rentas.fecha_renta) AS monto_rentas_acumulado 
+	
+FROM rentas
+-- RELACIONA RENTAS CON INVENTARIOS
+JOIN inventarios
+    ON rentas.inventario_id = inventarios.inventario_id
+
+JOIN peliculas
+    on inventarios.pelicula_id = peliculas.pelicula_id
+
+JOIN peliculas_categorias
+	ON peliculas.pelicula_id = peliculas_categorias.pelicula_id
+
+JOIN categorias
+	ON peliculas_categorias.categoria_id = categorias.categoria_id
+	
+WHERE 
+	peliculas.precio_renta < 1 and   
+	categorias.nombre = 'Horror'
+	
+GROUP BY   peliculas.pelicula_id, genero
+ORDER BY rentas_acumuladas DESC;
+Ejemplo 2: Utilizando Sub-queries (un SELECT dentro de otro SELECT)
+
+Para este ejemplo en particular es un tanto redundante, y si a mi parecer es mejor dejarlo como el codigo de arriba, su objetivo es que entiendas las diferencias.
+
+SELECT 
+	peliculas.titulo,
+	peliculas.clasificacion,
+	categorias.nombre AS genero,
+	count(*) AS rentas_acumuladas,
+	precio_renta * count(rentas.fecha_renta) AS monto_rentas_acumulado 
+	
+FROM rentas
+
+JOIN inventarios
+    ON rentas.inventario_id = inventarios.inventario_id
+
+JOIN peliculas
+    on inventarios.pelicula_id = peliculas.pelicula_id
+
+JOIN peliculas_categorias
+	ON peliculas.pelicula_id = peliculas_categorias.pelicula_id
+
+JOIN categorias
+	ON peliculas_categorias.categoria_id = categorias.categoria_id
+
+WHERE 
+	peliculas.precio_renta < 1 and   
+	categorias.nombre IN (
+		SELECT nombre
+		FROM categorias
+		WHERE nombre = 'Horror'
+	)
+
+GROUP BY   peliculas.pelicula_id, genero
+ORDER BY rentas_acumuladas DESC;
+Ejemplo 3: Utilizando Common Table Expressions (CTE’s)
+
+Este ejemplo es bastante mas verbose, te lo explico, WITH como te decia permite crear tablas temporales en memoria dentro del bloque de parentesis, en este caso creo la tabla peliculas_rentadas la cual hace join de inventarios y rentas ya que esta ultima no tiene el campo pelicula_id, la segunda tabla es peliculas_categoria_horror, ahora puedes llamar estas tablas de forma individual de la siguiente manera
+
+-- tabla temporal 1
+WITH peliculas_rentadas AS (
+	SELECT pelicula_id, COUNT(fecha_renta) AS rentas_acumuladas
+	FROM inventarios
+	JOIN  rentas
+		ON inventarios.inventario_id = rentas.inventario_id
+	GROUP BY inventarios.pelicula_id
+	ORDER BY rentas_acumuladas DESC
+), 
+
+-- tabla temporal 2
+peliculas_categoria_horror AS (
+	SELECT pelicula_id, nombre
+	FROM peliculas_categorias
+	JOIN categorias 
+		ON peliculas_categorias.categoria_id = categorias.categoria_id
+	WHERE 
+		categorias.nombre = 'Horror'
+)
+
+SELECT * FROM peliculas_rentadas;
+-- O sustituyendo por peliculas_categoria_horror 
+Ahora viene la magia, re-utilizando el codigo anterior podemos utilizar el campo pelicula_id para hacer join directamente al campo de peliculas y aplicar las restricciones con la sentencia WHERE
+
+-- tabla temporal 1
+WITH peliculas_rentadas AS (
+	SELECT pelicula_id, COUNT(fecha_renta) AS rentas_acumuladas
+	FROM inventarios
+	JOIN  rentas
+		ON inventarios.inventario_id = rentas.inventario_id
+	GROUP BY inventarios.pelicula_id
+	ORDER BY rentas_acumuladas DESC
+), 
+
+-- tabla temporal 2
+peliculas_categoria_horror AS (
+	SELECT pelicula_id, nombre
+	FROM peliculas_categorias
+	JOIN categorias 
+		ON peliculas_categorias.categoria_id = categorias.categoria_id
+	WHERE 
+		categorias.nombre = 'Horror'
+)
+
+SELECT 
+	peliculas.titulo,
+	peliculas.clasificacion,
+	peliculas_categoria_horror.nombre AS genero,
+	peliculas_rentadas.rentas_acumuladas AS rentas_acumuladas,
+	precio_renta * (peliculas_rentadas.rentas_acumuladas) AS monto_rentas_acumulado 
+	
+FROM peliculas
+	JOIN peliculas_categoria_horror
+		ON peliculas.pelicula_id = peliculas_categoria_horror.pelicula_id
+	JOIN peliculas_rentadas
+		ON peliculas.pelicula_id = peliculas_rentadas.pelicula_id
+
+WHERE 
+	peliculas.duracion > 100 and peliculas.precio_renta < 1 ;
+Al realizar todas la consultas en los ejemplos obtenemos la siguiente tabla
+
+https://s3-us-west-2.amazonaws.com/secure.notion-static.com/8db01888-0867-4295-bd05-716046902114/Untitled.png
+Como tu puedes observar, son tres ejemplos que realizan la misma función, sin embargo cuando tu tabla crece a medida que tu aplicación gana popularidad el performance de las consultas se vuelve vital, por lo que te invito a probar con codigo de tu invencion y revisar el tiempo que tarda cada consulta en realizarse.
+
+Finalmente te invito a utiliar los CTE’s que pueden llegar a reducir el tiempo del query, aumentar su legibilidad y al mismo tiempo su mantenimiento en caso de que necesites modificar o crear nuevos features, y si al terminar de leer esto te gustó el tutorial regalale un corazón.
